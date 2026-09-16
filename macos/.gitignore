@@ -1,0 +1,8 @@
+# Kang Engineering Systems LLC, 2026, Copyright protection
+# Flutter-related
+**/Flutter/ephemeral/
+**/Pods/
+
+# Xcode-related
+**/dgph
+**/xcuserdata/

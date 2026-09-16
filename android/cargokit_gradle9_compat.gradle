@@ -1,0 +1,18 @@
+// Kang Engineering Systems LLC, 2026, Copyright protection
+// Gradle 9 removed Project.exec(). super_drag_and_drop 0.9.1's CargoKit still
+// calls it, so restore a compatible exec() using ExecOperations.
+
+import javax.inject.Inject
+import org.gradle.process.ExecOperations
+
+abstract class CargokitExecOps {
+    @Inject
+    abstract ExecOperations getExecOperations()
+}
+
+gradle.beforeProject { project ->
+    def execOps = project.objects.newInstance(CargokitExecOps).execOperations
+    project.metaClass.exec = { Closure action ->
+        execOps.exec(action)
+    }
+}
