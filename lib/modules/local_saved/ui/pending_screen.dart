@@ -103,6 +103,25 @@ class _PendingScreenState extends State<PendingScreen> {
     _preloadBytes(draft);
   }
 
+  Future<void> _showDraftDetails(DraftObject draft) async {
+    _selectDraft(draft);
+    await _preloadBytes(draft);
+    if (!mounted) {
+      return;
+    }
+    await showDialog<void>(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return _PendingRecordDialog(
+          draft: draft,
+          bytes: _bytesByUri[draft.fileUri],
+          amountText: _formatAmount(draft),
+          dateText: _formatDate(draft.transactionDate),
+        );
+      },
+    );
+  }
+
   Future<void> _preloadBytes(DraftObject draft) async {
     if (_bytesByUri.containsKey(draft.fileUri)) {
       return;
@@ -207,10 +226,7 @@ class _PendingScreenState extends State<PendingScreen> {
     }
   }
 
-  Widget _exportable({
-    required DraftObject draft,
-    required Widget child,
-  }) {
+  Widget _exportable({required DraftObject draft, required Widget child}) {
     Widget dropRectangle(BuildContext context, Widget child) {
       return _DraftDropRectangle(
         vendor: draft.vendor,
@@ -233,6 +249,7 @@ class _PendingScreenState extends State<PendingScreen> {
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: () => _selectDraft(draft),
+          onDoubleTap: () => _showDraftDetails(draft),
           onSecondaryTapUp: (TapUpDetails details) {
             _showCopyMenu(context, details.globalPosition, draft);
           },
@@ -316,109 +333,144 @@ class _PendingScreenState extends State<PendingScreen> {
                   );
                 }
 
-                return myWidget(
-                  id: 'pending.table',
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.all(16),
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: DataTable(
-                        key: myWidgetKey('pending.data_table'),
-                        showCheckboxColumn: false,
-                        headingRowColor: WidgetStateProperty.all(
-                          Theme.of(
-                            context,
-                          ).colorScheme.surfaceContainerHighest,
-                        ),
-                        dataRowMinHeight: 56,
-                        dataRowMaxHeight: 64,
-                        columns: const <DataColumn>[
-                          DataColumn(label: Text('')),
-                          DataColumn(label: Text('Vendor')),
-                          DataColumn(label: Text('Amount')),
-                          DataColumn(label: Text('Date')),
-                          DataColumn(label: Text('State')),
-                          DataColumn(label: Text('Notes')),
-                        ],
-                        rows: _drafts
-                            .map(
-                              (DraftObject draft) => DataRow(
-                                key: myWidgetKey(
-                                  'pending.row.${draft.idempotencyKey}',
-                                ),
-                                selected:
-                                    _selectedKey == draft.idempotencyKey,
-                                cells: <DataCell>[
-                                  DataCell(
-                                    _exportable(
-                                      draft: draft,
-                                      child: myWidget(
-                                        id: 'pending.row.${draft.idempotencyKey}.thumbnail',
-                                        image: true,
-                                        label: 'Receipt thumbnail',
-                                        child: _DraftThumbnail(
-                                          fileUri: draft.fileUri,
-                                          onLoaded: (Uint8List bytes) {
-                                            _bytesByUri[draft.fileUri] = bytes;
-                                          },
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  DataCell(
-                                    _exportable(
-                                      draft: draft,
-                                      child: myWidget(
-                                        id: 'pending.row.${draft.idempotencyKey}.vendor',
-                                        child: Text(draft.vendor),
-                                      ),
-                                    ),
-                                  ),
-                                  DataCell(
-                                    _exportable(
-                                      draft: draft,
-                                      child: myWidget(
-                                        id: 'pending.row.${draft.idempotencyKey}.amount',
-                                        child: Text(_formatAmount(draft)),
-                                      ),
-                                    ),
-                                  ),
-                                  DataCell(
-                                    _exportable(
-                                      draft: draft,
-                                      child: myWidget(
-                                        id: 'pending.row.${draft.idempotencyKey}.date',
-                                        child: Text(
-                                          _formatDate(draft.transactionDate),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  DataCell(
-                                    _exportable(
-                                      draft: draft,
-                                      child: myWidget(
-                                        id: 'pending.row.${draft.idempotencyKey}.state',
-                                        child: Text(draft.state.displayName),
-                                      ),
-                                    ),
-                                  ),
-                                  DataCell(
-                                    _exportable(
-                                      draft: draft,
-                                      child: myWidget(
-                                        id: 'pending.row.${draft.idempotencyKey}.notes',
-                                        child: Text(draft.notes),
-                                      ),
-                                    ),
-                                  ),
-                                ],
+                return LayoutBuilder(
+                  builder: (BuildContext context, BoxConstraints constraints) {
+                    return myWidget(
+                      id: 'pending.table',
+                      child: SingleChildScrollView(
+                        child: SizedBox(
+                          width: constraints.maxWidth,
+                          child: DataTable(
+                            key: myWidgetKey('pending.data_table'),
+                            showCheckboxColumn: false,
+                            horizontalMargin: 16,
+                            columnSpacing: 16,
+                            headingRowColor: WidgetStateProperty.all(
+                              Theme.of(
+                                context,
+                              ).colorScheme.surfaceContainerHighest,
+                            ),
+                            dataRowMinHeight: 56,
+                            dataRowMaxHeight: 64,
+                            columns: const <DataColumn>[
+                              DataColumn(
+                                columnWidth: IntrinsicColumnWidth(),
+                                label: Text(''),
                               ),
-                            )
-                            .toList(),
+                              DataColumn(
+                                columnWidth: FlexColumnWidth(2),
+                                label: _TruncatedHeader('Vendor'),
+                              ),
+                              DataColumn(
+                                columnWidth: FlexColumnWidth(1.2),
+                                numeric: true,
+                                label: _TruncatedHeader(
+                                  'Amount',
+                                  textAlign: TextAlign.end,
+                                ),
+                              ),
+                              DataColumn(
+                                columnWidth: FlexColumnWidth(1.1),
+                                label: _TruncatedHeader('Date'),
+                              ),
+                              DataColumn(
+                                columnWidth: FlexColumnWidth(1.2),
+                                label: _TruncatedHeader('State'),
+                              ),
+                              DataColumn(
+                                columnWidth: FlexColumnWidth(2),
+                                label: _TruncatedHeader('Notes'),
+                              ),
+                            ],
+                            rows: _drafts
+                                .map(
+                                  (DraftObject draft) => DataRow(
+                                    key: myWidgetKey(
+                                      'pending.row.${draft.idempotencyKey}',
+                                    ),
+                                    selected:
+                                        _selectedKey == draft.idempotencyKey,
+                                    cells: <DataCell>[
+                                      DataCell(
+                                        _exportable(
+                                          draft: draft,
+                                          child: myWidget(
+                                            id: 'pending.row.${draft.idempotencyKey}.thumbnail',
+                                            image: true,
+                                            label: 'Receipt thumbnail',
+                                            child: _DraftThumbnail(
+                                              fileUri: draft.fileUri,
+                                              onLoaded: (Uint8List bytes) {
+                                                _bytesByUri[draft.fileUri] =
+                                                    bytes;
+                                              },
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      DataCell(
+                                        _exportable(
+                                          draft: draft,
+                                          child: myWidget(
+                                            id: 'pending.row.${draft.idempotencyKey}.vendor',
+                                            child: _TruncatedText(draft.vendor),
+                                          ),
+                                        ),
+                                      ),
+                                      DataCell(
+                                        _exportable(
+                                          draft: draft,
+                                          child: myWidget(
+                                            id: 'pending.row.${draft.idempotencyKey}.amount',
+                                            child: _TruncatedText(
+                                              _formatAmount(draft),
+                                              textAlign: TextAlign.end,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      DataCell(
+                                        _exportable(
+                                          draft: draft,
+                                          child: myWidget(
+                                            id: 'pending.row.${draft.idempotencyKey}.date',
+                                            child: _TruncatedText(
+                                              _formatDate(
+                                                draft.transactionDate,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      DataCell(
+                                        _exportable(
+                                          draft: draft,
+                                          child: myWidget(
+                                            id: 'pending.row.${draft.idempotencyKey}.state',
+                                            child: _TruncatedText(
+                                              draft.state.displayName,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      DataCell(
+                                        _exportable(
+                                          draft: draft,
+                                          child: myWidget(
+                                            id: 'pending.row.${draft.idempotencyKey}.notes',
+                                            child: _TruncatedText(draft.notes),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                )
+                                .toList(),
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
+                    );
+                  },
                 );
               },
             ),
@@ -579,10 +631,7 @@ class _DraftThumbnailState extends State<_DraftThumbnail> {
 }
 
 class _DraftDropRectangle extends StatelessWidget {
-  const _DraftDropRectangle({
-    required this.vendor,
-    this.bytes,
-  });
+  const _DraftDropRectangle({required this.vendor, this.bytes});
 
   static const double _border = 2;
   static const double _padding = 8;
@@ -650,6 +699,245 @@ class _DraftDropRectangle extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _PendingRecordDialog extends StatelessWidget {
+  const _PendingRecordDialog({
+    required this.draft,
+    required this.amountText,
+    required this.dateText,
+    this.bytes,
+  });
+
+  final DraftObject draft;
+  final String amountText;
+  final String dateText;
+  final Uint8List? bytes;
+
+  @override
+  Widget build(BuildContext context) {
+    final Size size = MediaQuery.sizeOf(context);
+    final bool landscape = size.width > size.height;
+    final double dialogWidth = landscape ? size.width * 0.9 : size.width * 0.94;
+    final double dialogHeight = size.height * 0.86;
+    final TextTheme textTheme = Theme.of(context).textTheme;
+    final ColorScheme colors = Theme.of(context).colorScheme;
+
+    final Widget image = myWidget(
+      id: 'pending.detail.image',
+      image: true,
+      label: 'Receipt image',
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: colors.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: bytes != null
+              ? Image.memory(bytes!, fit: BoxFit.contain)
+              : Center(
+                  child: Icon(
+                    Icons.broken_image_outlined,
+                    size: 48,
+                    color: colors.onSurfaceVariant,
+                  ),
+                ),
+        ),
+      ),
+    );
+
+    final Widget fields = myWidget(
+      id: 'pending.detail.fields',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          _detailField(
+            id: 'pending.detail.vendor',
+            label: 'Vendor',
+            value: draft.vendor,
+            textTheme: textTheme,
+            colors: colors,
+          ),
+          _detailField(
+            id: 'pending.detail.amount',
+            label: 'Amount',
+            value: amountText,
+            textTheme: textTheme,
+            colors: colors,
+          ),
+          _detailField(
+            id: 'pending.detail.currency',
+            label: 'Currency',
+            value: draft.currency,
+            textTheme: textTheme,
+            colors: colors,
+          ),
+          _detailField(
+            id: 'pending.detail.date',
+            label: 'Date',
+            value: dateText,
+            textTheme: textTheme,
+            colors: colors,
+          ),
+          _detailField(
+            id: 'pending.detail.state',
+            label: 'State',
+            value: draft.state.displayName,
+            textTheme: textTheme,
+            colors: colors,
+          ),
+          _detailField(
+            id: 'pending.detail.notes',
+            label: 'Notes',
+            value: draft.notes,
+            textTheme: textTheme,
+            colors: colors,
+          ),
+        ],
+      ),
+    );
+
+    return Dialog(
+      key: myWidgetKey('pending.detail_dialog'),
+      insetPadding: EdgeInsets.symmetric(
+        horizontal: size.width * 0.03,
+        vertical: size.height * 0.04,
+      ),
+      child: SizedBox(
+        width: dialogWidth,
+        height: dialogHeight,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 8, 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              Row(
+                children: <Widget>[
+                  Expanded(
+                    child: myWidget(
+                      id: 'pending.detail.title',
+                      header: true,
+                      child: Text(
+                        draft.vendor.isEmpty ? 'Pending record' : draft.vendor,
+                        style: textTheme.titleLarge,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+                  myWidget(
+                    id: 'pending.detail.close',
+                    button: true,
+                    label: 'Close',
+                    child: IconButton(
+                      tooltip: 'Close',
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(Icons.close),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Expanded(
+                child: landscape
+                    ? Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: <Widget>[
+                          Expanded(flex: 3, child: image),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            flex: 2,
+                            child: SingleChildScrollView(child: fields),
+                          ),
+                        ],
+                      )
+                    : SingleChildScrollView(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: <Widget>[
+                            SizedBox(height: dialogHeight * 0.45, child: image),
+                            const SizedBox(height: 16),
+                            fields,
+                          ],
+                        ),
+                      ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _detailField({
+    required String id,
+    required String label,
+    required String value,
+    required TextTheme textTheme,
+    required ColorScheme colors,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: myWidget(
+        id: id,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text(
+              label,
+              style: textTheme.labelMedium?.copyWith(
+                color: colors.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(value.isEmpty ? '—' : value, style: textTheme.bodyLarge),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TruncatedHeader extends StatelessWidget {
+  const _TruncatedHeader(this.text, {this.textAlign = TextAlign.start});
+
+  final String text;
+  final TextAlign textAlign;
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Text(
+        text,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        softWrap: false,
+        textAlign: textAlign,
+      ),
+    );
+  }
+}
+
+class _TruncatedText extends StatelessWidget {
+  const _TruncatedText(this.text, {this.textAlign = TextAlign.start});
+
+  final String text;
+  final TextAlign textAlign;
+
+  @override
+  Widget build(BuildContext context) {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minWidth: 0),
+      child: Text(
+        text,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        softWrap: false,
+        textAlign: textAlign,
       ),
     );
   }
